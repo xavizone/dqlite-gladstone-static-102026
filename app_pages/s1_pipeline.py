@@ -2,12 +2,15 @@
 # Co-authored with CoCo
 import streamlit as st
 
+import story
+
 import sample_data as D
 from ui import (capability, checkpoints, explanations, footer, header, prompt, result_label, snowsight,
                 sql_steps, table, tech, what_why)
 
 P = "session_01"
 header(P)
+story.chapter(1)
 st.info(""":material/support_agent: **Riverside Leisure, on the phone to Customer Success:**
 *"Nova says we have more active members than our front desk can count, and today's revenue looks far too low."*""")
 capability("Map one operator's Nova pipeline end to end - Bronze tables, the merge task, REPORTING Dynamic Tables "
@@ -53,6 +56,7 @@ st.markdown("**Net revenue, last 3 days** (semantic view `rev.net_revenue`)")
 table(D.S1_REVENUE)
 
 checkpoints(P)
+story.turn(1)
 explanations(P)
 tech(P)
 sql_steps(P)

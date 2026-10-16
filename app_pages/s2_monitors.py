@@ -4,6 +4,8 @@ import json
 
 import streamlit as st
 
+import story
+
 import sample_data as D
 from snippets import PAGES
 from ui import (capability, checkpoints, expectations_table, explanations, footer, header, prompt, result_label,
@@ -11,6 +13,7 @@ from ui import (capability, checkpoints, expectations_table, explanations, foote
 
 P = "session_02"
 header(P)
+story.chapter(2)
 capability("Data metric functions (system and custom) with **expectations** - rules that must always hold - plus "
            "email notifications and an **alert** that logs every failure to `DQ_INCIDENTS`.",
            "Session 2 (8 min)", "`SHOW DATA METRIC FUNCTIONS IN SCHEMA SNOWFLAKE.CORE`; `EXECUTE ALERT` granted")
@@ -46,6 +49,7 @@ with c1:
 c2.metric("Rows in DQ_INCIDENTS", D.S2_INCIDENTS_EMPTY[0]["INCIDENTS"], help="Empty until a check fails")
 
 checkpoints(P)
+story.turn(2)
 concepts = PAGES[P].get("concepts", [])
 if concepts:
     st.markdown("##### :material/lightbulb: Key concepts")

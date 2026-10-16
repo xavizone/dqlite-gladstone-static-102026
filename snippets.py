@@ -468,7 +468,7 @@ PAGES = {
     'examples': [
   {
     "title": "Before a Nova answer reaches an operator",
-    "body": "Guards on the Bronze tables Bifrost writes to, so a bad sync stops at Silver instead of reaching the Nova Portal."
+    "body": "Guards on the Bronze tables Bifrost writes to, so a bad sync is caught at Bronze - and, with checks run on change, held back before the Nova Portal refreshes."
   },
   {
     "title": "Customer Success escalations",
@@ -758,7 +758,7 @@ PAGES = {
   }
 ],
     'fallbacks': [
-  "USE SCHEMA GLADSTONE_DQ_LITE.RIVERSIDE_NIELS;\nSELECT * FROM DQ_INCIDENTS ORDER BY opened_at;\nSELECT * FROM TABLE(SYSTEM$DATA_METRIC_SCAN(\n  REF_ENTITY_NAME => 'GLADSTONE_DQ_LITE.RIVERSIDE_NIELS.MEMBERS__MEMBER',\n  METRIC_NAME => 'SNOWFLAKE.CORE.DUPLICATE_COUNT', ARGUMENT_NAME => 'member_id')) LIMIT 20;\nSELECT batch_id, table_name, COUNT(*) AS times_applied FROM _SYNC_META__MERGE_BATCH GROUP BY 1, 2 HAVING COUNT(*) > 1;\nSELECT _batch_id, COUNT(*), SUM(amount) FROM SYSTEM__PAYMENT WHERE amount < 0 GROUP BY 1;\nSHOW TASKS LIKE 'TSK_BIFROST_MERGE';\n\nCREATE OR REPLACE TASK TSK_DQ_CIRCUIT_BREAKER\n  WAREHOUSE = DQ_LITE_WH SCHEDULE = '1 MINUTE'\nAS\nEXECUTE IMMEDIATE $$\nDECLARE\n  bad NUMBER;\n  msg VARCHAR;\nBEGIN\n  SELECT COUNT(*) INTO :bad FROM (\n    SELECT expectation_violated FROM SNOWFLAKE.LOCAL.DATA_QUALITY_MONITORING_EXPECTATION_STATUS\n    WHERE table_database = 'GLADSTONE_DQ_LITE' AND table_schema = 'RIVERSIDE_NIELS'\n      AND measurement_time >= (SELECT created FROM GLADSTONE_DQ_LITE.INFORMATION_SCHEMA.SCHEMATA WHERE schema_name = 'RIVERSIDE_NIELS')\n      AND table_name IN ('MEMBERS__MEMBER', 'SYSTEM__PAYMENT', 'SYSTEM__ATTENDANCE')\n    QUALIFY ROW_NUMBER() OVER (PARTITION BY table_name, expectation_name ORDER BY measurement_time DESC) = 1)\n  WHERE expectation_violated;\n  IF (bad > 0) THEN\n    ALTER DYNAMIC TABLE GLADSTONE_DQ_LITE.RIVERSIDE_NIELS.REPORTING__ACTIVE_MEMBERS SUSPEND;\n    ALTER DYNAMIC TABLE GLADSTONE_DQ_LITE.RIVERSIDE_NIELS.REPORTING__DAILY_REVENUE SUSPEND;\n    msg := 'OPEN: ' || :bad || ' failing Bronze check(s) - REPORTING frozen at last good state';\n    CALL SYSTEM$SET_RETURN_VALUE(:msg);\n  ELSE\n    ALTER DYNAMIC TABLE GLADSTONE_DQ_LITE.RIVERSIDE_NIELS.REPORTING__ACTIVE_MEMBERS RESUME;\n    ALTER DYNAMIC TABLE GLADSTONE_DQ_LITE.RIVERSIDE_NIELS.REPORTING__DAILY_REVENUE RESUME;\n    CALL SYSTEM$SET_RETURN_VALUE('CLOSED: Bronze clean');\n  END IF;\nEND;\n$$;\nALTER TASK TSK_DQ_CIRCUIT_BREAKER RESUME;"
+  "USE SCHEMA GLADSTONE_DQ_LITE.RIVERSIDE_NIELS;\nSELECT * FROM DQ_INCIDENTS ORDER BY opened_at;\nSELECT * FROM TABLE(SYSTEM$DATA_METRIC_SCAN(\n  REF_ENTITY_NAME => 'GLADSTONE_DQ_LITE.RIVERSIDE_NIELS.MEMBERS__MEMBER',\n  METRIC_NAME => 'SNOWFLAKE.CORE.DUPLICATE_COUNT', ARGUMENT_NAME => 'member_id')) LIMIT 20;\nSELECT batch_id, table_name, COUNT(*) AS times_applied FROM _SYNC_META__MERGE_BATCH GROUP BY 1, 2 HAVING COUNT(*) > 1;\nSELECT _batch_id, COUNT(*), SUM(amount) FROM SYSTEM__PAYMENT WHERE amount < 0 GROUP BY 1;\nSHOW TASKS LIKE 'TSK_BIFROST_MERGE';\n\nCREATE OR REPLACE TASK TSK_DQ_CIRCUIT_BREAKER\n  WAREHOUSE = DQ_LITE_WH SCHEDULE = '1 MINUTE'\nAS\nEXECUTE IMMEDIATE $$\nDECLARE\n  bad NUMBER;\n  msg VARCHAR;\nBEGIN\n  SELECT COUNT(*) INTO :bad FROM (\n    SELECT expectation_violated FROM SNOWFLAKE.LOCAL.DATA_QUALITY_MONITORING_EXPECTATION_STATUS\n    WHERE table_database = 'GLADSTONE_DQ_LITE' AND table_schema = 'RIVERSIDE_NIELS'\n      AND measurement_time >= (SELECT created FROM GLADSTONE_DQ_LITE.INFORMATION_SCHEMA.SCHEMATA WHERE schema_name = 'RIVERSIDE_NIELS')\n      AND table_name IN ('MEMBERS__MEMBER', 'SYSTEM__PAYMENT', 'SYSTEM__ATTENDANCE')\n    QUALIFY ROW_NUMBER() OVER (PARTITION BY table_name, expectation_name ORDER BY measurement_time DESC) = 1)\n  WHERE expectation_violated;\n  IF (bad > 0) THEN\n    ALTER DYNAMIC TABLE GLADSTONE_DQ_LITE.RIVERSIDE_NIELS.REPORTING__ACTIVE_MEMBERS SUSPEND;\n    ALTER DYNAMIC TABLE GLADSTONE_DQ_LITE.RIVERSIDE_NIELS.REPORTING__DAILY_REVENUE SUSPEND;\n    msg := 'OPEN: ' || :bad || ' failing Bronze check(s) - REPORTING refresh paused';\n    CALL SYSTEM$SET_RETURN_VALUE(:msg);\n  ELSE\n    ALTER DYNAMIC TABLE GLADSTONE_DQ_LITE.RIVERSIDE_NIELS.REPORTING__ACTIVE_MEMBERS RESUME;\n    ALTER DYNAMIC TABLE GLADSTONE_DQ_LITE.RIVERSIDE_NIELS.REPORTING__DAILY_REVENUE RESUME;\n    CALL SYSTEM$SET_RETURN_VALUE('CLOSED: Bronze clean');\n  END IF;\nEND;\n$$;\nALTER TASK TSK_DQ_CIRCUIT_BREAKER RESUME;"
 ],
     'snowsight': [
   {
@@ -782,7 +782,7 @@ PAGES = {
     'checkpoints': [
   {
     "after": "Prompt 3.2",
-    "text": "`DQ_INCIDENTS` has rows for **duplicates (150)**, **negative amounts (40)** and **freshness (over 180 s)**. The breaker returns **OPEN** and both REPORTING tables are **SUSPENDED**: Nova keeps showing the last good numbers.",
+    "text": "`DQ_INCIDENTS` has rows for **duplicates (150)**, **negative amounts (40)** and **freshness (over 180 s)**. The breaker returns **OPEN** and both REPORTING tables are **SUSPENDED**: nothing new reaches Nova until Bronze is clean.",
     "sql": None
   }
 ],
@@ -792,8 +792,12 @@ PAGES = {
     "body": "\n| If CoCo finds... | It's the... | Notice |\n|---|---|---|\n| `DUPLICATE_COUNT(member_id)` = 150, batch `B-REPLAY-01` applied twice | Bifrost replay | Active members inflated by 150 |\n| `NEGATIVE_COUNT(amount)` = 40, batch `B-SIGNBUG-01` | Refund sign flip | Today's net revenue drops by \u00a310,000 |\n| `FRESHNESS` over 180 s, task SUSPENDED | Merge task stalled | REPORTING lag stays **0**: REPORTING isn't behind its source - the **source** stopped. That's why you need both checks. |\n"
   },
   {
-    "title": "Why freeze REPORTING instead of deleting the bad rows?",
-    "body": "\nContainment and repair are different jobs. The breaker is automatic and safe: it stops bad numbers reaching Nova **now**,\nwithout guessing which rows to delete. The repair (Session 4) is a deliberate fix by the source team, and the breaker\ncloses by itself on its next run once every Bronze check passes.\n"
+    "title": "Nova already shows the bad revenue - why?",
+    "body": "\nIn the lab, REPORTING refreshes every **minute** but the checks run every **5 minutes**, so the first bad batch reaches\nREPORTING before any check fails. The breaker then stops it getting worse, but it can't undo that first refresh.\n\nTo stop a bad batch **before** it publishes, run the Bronze checks on change and make REPORTING wait for them:\n- `DATA_METRIC_SCHEDULE = 'TRIGGER_ON_CHANGES'` on the Bronze tables Bifrost writes to, and\n- REPORTING with `TARGET_LAG = DOWNSTREAM` (or a lag longer than the check), refreshed by the breaker task only when\n  every Bronze check passes (`ALTER DYNAMIC TABLE ... REFRESH`).\n"
+  },
+  {
+    "title": "Why pause REPORTING instead of deleting the bad rows?",
+    "body": "\nContainment and repair are different jobs. The breaker is automatic and safe: it stops further bad batches reaching Nova **now**,\nwithout guessing which rows to delete. The repair (Session 4) is a deliberate fix by the source team, and the breaker\ncloses by itself on its next run once every Bronze check passes.\n"
   }
 ],
     'examples': [
@@ -816,8 +820,8 @@ PAGES = {
   "duration": "9 min",
   "building": "A root cause from one prompt, and a circuit breaker"
 },
-    'what': "Watch your guards fire, then ask CoCo what broke and why - the way Customer Success would. Then add a **circuit breaker** that freezes REPORTING while any Bronze check is failing, so Nova keeps serving the last good numbers.",
-    'why': "Catching is half the job. Explaining it (which batch, which rows) and **containing** it (bad data never reaches Nova) is what lets Customer Success tell the operator *\"we know, it's fixed\"* before they ring.",
+    'what': "Watch your guards fire, then ask CoCo what broke and why - the way Customer Success would. Then add a **circuit breaker** that pauses the REPORTING refresh while any Bronze check is failing, so no further bad batches reach Nova.",
+    'why': "Catching is half the job. Explaining it (which batch, which rows) and **containing** it (no more bad batches reach Nova) is what lets Customer Success tell the operator *\"we know, it's fixed\"* before they ring.",
     'fallback_after': [
   "Prompt 3.2"
 ],
@@ -937,7 +941,7 @@ PAGES = {
   "Seven expectations and an anomaly monitor on Riverside's Bronze and REPORTING tables",
   "Email notifications on the two critical checks",
   "`DQ_INCIDENT_ALERT` writing every new failure to `DQ_INCIDENTS`",
-  "`TSK_DQ_CIRCUIT_BREAKER` holding back bad numbers from Nova",
+  "`TSK_DQ_CIRCUIT_BREAKER` pausing REPORTING while Bronze is failing",
   "`V_DQ_HEALTH`, the first thing Customer Success opens"
 ],
     'refs': {'Quickstarts': [L.QS_DQ, L.QS_DQM], 'Docs': [L.DQ_CUSTOM, L.DQ_EXPECT, L.DQ_DASH, L.TASK_RETURN]},

@@ -2,12 +2,15 @@
 # Co-authored with CoCo
 import streamlit as st
 
+import story
+
 import sample_data as D
 from ui import (capability, checkpoints, explanations, footer, header, prompt, result_label, snowsight,
                 sql_steps, table, tech, what_why)
 
 P = "session_03"
 header(P)
+story.chapter(3)
 capability("Catch faults as they land (expectations + the incident alert), explain them with failing rows and the "
            "merge batch, and **contain** them with a circuit breaker that freezes REPORTING.",
            "Session 3 (9 min)", "`SNOWFLAKE.LOCAL.DATA_QUALITY_MONITORING_EXPECTATION_STATUS` returns rows for your schema")
@@ -23,6 +26,7 @@ if st.button("Inject faults 1-3 (replay the captured run)", type="primary", icon
 
 
 def faulted():
+    story.ticket("s3")
     result_label("Captured from a real run, about 5 minutes after injection")
     table(D.F_FAULTS, cols=["FAULT_NO", "FAULT_CODE", "DESCRIPTION", "CAUGHT_BY"])
     st.markdown("#### :material/notifications_active: Caught: `DQ_INCIDENTS`, written by the alert")
@@ -78,6 +82,7 @@ else:
     st.caption("Press the button to see what the guards caught.")
 
 checkpoints(P)
+story.turn(3)
 explanations(P)
 tech(P)
 sql_steps(P)

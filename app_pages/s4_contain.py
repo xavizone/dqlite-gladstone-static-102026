@@ -2,6 +2,8 @@
 # Co-authored with CoCo
 import streamlit as st
 
+import story
+
 import sample_data as D
 from snippets import PAGES
 from ui import (capability, checkpoints, explanations, footer, header, prompt, result_label, snowsight,
@@ -9,6 +11,8 @@ from ui import (capability, checkpoints, explanations, footer, header, prompt, r
 
 P = "session_04"
 header(P)
+story.chapter(4)
+story.ticket("s4")
 capability("One health view per operator (`V_DQ_HEALTH`) over the expectation results and the incident log, a "
            "business-rule fault caught by a custom DMF, and a breaker that closes by itself after the fix.",
            "Session 4 (8 min)", "`CREATE VIEW` over `SNOWFLAKE.LOCAL` in your schema")
@@ -68,6 +72,8 @@ with st.expander(":material/info: The first health check after the fix"):
     health(D.S4_HEALTH_OK)
 
 checkpoints(P)
+story.turn(4)
+story.epilogue()
 built = PAGES[P].get("built", [])
 if built:
     st.markdown("##### :material/check_circle: What you built")

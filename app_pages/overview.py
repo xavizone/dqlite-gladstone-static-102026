@@ -4,6 +4,8 @@ from pathlib import Path
 
 import streamlit as st
 
+import story
+
 from ui import footer
 
 _STATIC = Path(__file__).parent.parent / "static"
@@ -24,6 +26,11 @@ c1.metric("Core lab", "30 min", help="Sessions 1-4")
 c2.metric("Prompts", "8 core", help="Plus stretch and bonus prompts")
 c3.metric("Faults", "4", help="Injected live, the same for everyone")
 c4.metric("Bonus labs", "3", help="Budgets, governance + GDPR, DCM DevOps")
+
+st.markdown("### Who's in this story")
+story.cast()
+st.markdown("### Two versions of the same morning")
+story.timelines()
 
 st.markdown("""
 ### Why this matters
